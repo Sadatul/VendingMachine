@@ -3,6 +3,7 @@
 #include <Wire.h>
 #include <LiquidCrystal_I2C.h>
 
+// RFID
 #define SS_PIN 10  //slave select pin
 #define RST_PIN 9  //reset pin
 
@@ -14,7 +15,14 @@ MFRC522::MIFARE_Key key;          //create a MIFARE_Key struct named 'key', whic
 //this is the block number we will write into and then read.
 int block=2;  
 
+// FOR LCD
 LiquidCrystal_I2C lcd(0x27, 16, 2); // set the LCD address to 0x27 for a 16 chars and 2 line display
+
+// For debouncing the button
+int rfidReadButtonState;            
+int rfidReadLastButtonState = LOW;  
+unsigned long rfidReadLastDebounceTime = 0;  
+unsigned long debounceDelay = 50;   
 
 unsigned long int curBalance = 0;
 
@@ -27,6 +35,7 @@ void setup()
     SPI.begin();               // Init SPI bus
     mfrc522.PCD_Init();        // Init MFRC522 card (in case you wonder what PCD means: proximity coupling device)
     Serial.println("Scan a MIFARE Classic card");
+    pinMode(rfidReadButton, INPUT);
   
   // Prepare the security key for the read and write functions.
     for (byte i = 0; i < 6; i++) {
@@ -43,14 +52,32 @@ void loop()
   sprintf(s, "%ld", curBalance);
   lcd.print(s);
 
-  readBalFromRFID();
+  int rfidReadReading = digitalRead(rfidReadButton);
+  if(rfidReadReading != rfidReadLastButtonState){
+    rfidReadLastDebounceTime = millis();
+  }
+
+  if((millis() - rfidReadLastDebounceTime) > debounceDelay){
+    if(rfidReadReading != rfidReadButtonState){
+      rfidReadButtonState = rfidReadReading;
+      if(rfidReadButtonState == HIGH){
+        readBalFromRFID();
+      }
+    }
+  }
+
+  rfidReadLastButtonState = rfidReadReading;
+  // readBalFromRFID();
   
 }
 
 void readBalFromRFID(){
   if ( ! mfrc522.PICC_IsNewCardPresent()) {
-    // Serial.println("New Card");
+    // This helps with realiablity during button press.
+    if ( ! mfrc522.PICC_IsNewCardPresent()) {
+      Serial.println("Blocked");
     return;
+  }
   }
   
   // Select one of the cards
@@ -67,7 +94,10 @@ void readBalFromRFID(){
   Serial.print("Added: ");
   Serial.println(result, DEC);
   curBalance += result;
-
+  if(result == 0){
+    lcd.setCursor(0,0);
+    lcd.print("Empty Card");
+  }
   // As the card has been read, we make its value zero
 
   byte balanceData[8];
