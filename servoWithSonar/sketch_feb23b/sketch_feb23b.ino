@@ -78,7 +78,8 @@ void loop() {
 
       // only toggle the LED if the new button state is HIGH
       if (buttonState == HIGH) {
-        servo720Rotation();
+        if (cm > FALL_DISTANCE_CM_THRESHOLD || cm < FALL_DISTANCE_CM_THRESHOLD_LOW) servo720Rotation();
+        else Serial.println("PLEASE REMOVE THE PRODUCT FROM THE SHELF FIRST");
       }
     }
   }
