@@ -8,6 +8,9 @@
 #define RST_PIN 9  //reset pin
 
 const int rfidReadButton = 3;
+const int rfidWriteButton = 4;
+
+const char clearRow[16] = "                ";
 
 MFRC522 mfrc522(SS_PIN, RST_PIN);  // instatiate a MFRC522 reader object.
 MFRC522::MIFARE_Key key;          //create a MIFARE_Key struct named 'key', which will hold the card information
@@ -24,6 +27,10 @@ int rfidReadLastButtonState = LOW;
 unsigned long rfidReadLastDebounceTime = 0;  
 unsigned long debounceDelay = 50;   
 
+int rfidWriteButtonState;            
+int rfidWriteLastButtonState = LOW;  
+unsigned long rfidWriteLastDebounceTime = 0;
+
 unsigned long int curBalance = 0;
 
 void setup() 
@@ -36,6 +43,7 @@ void setup()
     mfrc522.PCD_Init();        // Init MFRC522 card (in case you wonder what PCD means: proximity coupling device)
     Serial.println("Scan a MIFARE Classic card");
     pinMode(rfidReadButton, INPUT);
+    pinMode(rfidWriteButton, INPUT);
   
   // Prepare the security key for the read and write functions.
     for (byte i = 0; i < 6; i++) {
@@ -50,6 +58,11 @@ void loop()
   lcd.print("Balance: ");
   char s[6];
   sprintf(s, "%ld", curBalance);
+  for (int i = strlen(s); i < 5; i++){
+    s[i] = " ";
+  }
+  s[5] = '\0';
+  // Serial.println(strlen(s));
   lcd.print(s);
 
   int rfidReadReading = digitalRead(rfidReadButton);
@@ -67,6 +80,22 @@ void loop()
   }
 
   rfidReadLastButtonState = rfidReadReading;
+
+  int rfidWriteReading = digitalRead(rfidWriteButton);
+  if(rfidWriteReading != rfidWriteLastButtonState){
+    rfidWriteLastDebounceTime = millis();
+  }
+
+  if((millis() - rfidWriteLastDebounceTime) > debounceDelay){
+    if(rfidWriteReading != rfidWriteButtonState){
+      rfidWriteButtonState = rfidWriteReading;
+      if(rfidWriteButtonState == HIGH){
+        writeBalToRFID();
+      }
+    }
+  }
+
+  rfidWriteLastButtonState = rfidWriteReading;
   // readBalFromRFID();
   
 }
@@ -75,9 +104,14 @@ void readBalFromRFID(){
   if ( ! mfrc522.PICC_IsNewCardPresent()) {
     // This helps with realiablity during button press.
     if ( ! mfrc522.PICC_IsNewCardPresent()) {
+      lcd.setCursor(0, 0);
+      lcd.clear();
+      lcd.print("No Card Found");
       Serial.println("Blocked");
-    return;
-  }
+      delay(3000);
+      lcd.clear();
+      return;
+    }
   }
   
   // Select one of the cards
@@ -96,7 +130,10 @@ void readBalFromRFID(){
   curBalance += result;
   if(result == 0){
     lcd.setCursor(0,0);
+    lcd.clear();
     lcd.print("Empty Card");
+    delay(3000);
+    lcd.clear();
   }
   // As the card has been read, we make its value zero
 
@@ -121,6 +158,43 @@ unsigned long int extractNum(byte readData[]){
   unsigned long int result = bytesToNumber(tmp);
   return result;
 
+}
+
+void writeBalToRFID(){
+  if ( ! mfrc522.PICC_IsNewCardPresent()) {
+    // This helps with realiablity during button press.
+    if ( ! mfrc522.PICC_IsNewCardPresent()) {
+      lcd.setCursor(0, 0);
+      lcd.clear();
+      lcd.print("No Card Found");
+      Serial.println("Blocked");
+      delay(3000);
+      lcd.clear();
+      return;
+    }
+  }
+  
+  // Select one of the cards
+  if ( ! mfrc522.PICC_ReadCardSerial()) 
+  {
+    return;
+  }
+  Serial.println("card selected");
+
+  byte balanceData[8];
+  byte hashData[8];
+  byte writeData[16];
+  numberToBytes(curBalance, balanceData);
+  hashInfo(hashData);
+  mergeData(hashData, balanceData, writeData);
+  writeBlock(block, writeData);
+
+  curBalance = 0;
+
+  // Halt PICC
+  mfrc522.PICC_HaltA();
+  // Stop encryption on PCD
+  mfrc522.PCD_StopCrypto1();
 }
 
 void numberToBytes(unsigned long int num, byte s[8])
