@@ -48,7 +48,7 @@ void loop()
    byte balanceData[8];
    byte hashData[8];
    byte writeData[16];
-   numberToBytes(25, balanceData);
+   numberToBytes(100, balanceData);
    hashInfo(hashData);
    mergeData(hashData, balanceData, writeData);
 
